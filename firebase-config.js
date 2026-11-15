@@ -1,13 +1,13 @@
 // うりぽん号メタ部屋 Firebase接続設定
 // ※これはクライアント公開前提のキー（秘密情報ではない）。書き込み制御はrules.jsonのセキュリティルールで行う
 window.FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAJaGgnVY6MWHx_zqkvvB4sC_x5oqrFllo",
-  authDomain: "uripon-meta-room.firebaseapp.com",
-  databaseURL: "https://uripon-meta-room-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "uripon-meta-room",
-  storageBucket: "uripon-meta-room.firebasestorage.app",
-  messagingSenderId: "304607530637",
-  appId: "1:304607530637:web:8aa1f106f2963e0a70dcc4"
+  apiKey: "AIzaSyBx9XIb1ZSVBDoScnnQ-Qpj7w1JImlEfR8",
+  authDomain: "uripon-meta-room-next.firebaseapp.com",
+  databaseURL: "https://uripon-meta-room-next-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "uripon-meta-room-next",
+  storageBucket: "uripon-meta-room-next.firebasestorage.app",
+  messagingSenderId: "63375293235",
+  appId: "1:63375293235:web:60bf7f871690d9bf0ddc46"
 };
 
 // Discordボイスチャンネルへのリンク（うりぽん号のボイスch）

@@ -1,0 +1,161 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "main": {
+        ".read": "auth != null && auth.token.email === 'room-access@uripon-meta-room.invalid'",
+        "players": {
+          "$player": {
+            ".write": "auth != null && auth.token.email === 'room-access@uripon-meta-room.invalid'",
+            ".validate": "!newData.exists() || newData.hasChildren(['name','bd','hr','hc','ac','acs','tp','bt','st','d','em','emu','sl','sd','si','sid','x','y','tx','ty','ts'])",
+            "name": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16"
+            },
+            "bd": {
+              ".validate": "newData.isString() && newData.val().length <= 32"
+            },
+            "hr": {
+              ".validate": "newData.isString() && newData.val().length <= 32"
+            },
+            "hc": {
+              ".validate": "newData.isString() && newData.val().length <= 16"
+            },
+            "ac": {
+              ".validate": "newData.isString() && newData.val().length <= 32"
+            },
+            "acs": {
+              ".validate": "newData.isString() && newData.val().length <= 8"
+            },
+            "tp": {
+              ".validate": "newData.isString() && newData.val().length <= 32"
+            },
+            "bt": {
+              ".validate": "newData.isString() && newData.val().length <= 32"
+            },
+            "st": {
+              ".validate": "newData.isString() && newData.val().length <= 8"
+            },
+            "d": {
+              ".validate": "newData.isString() && newData.val().length <= 5"
+            },
+            "em": {
+              ".validate": "newData.isString() && newData.val().length <= 8"
+            },
+            "emu": {
+              ".validate": "newData.isNumber()"
+            },
+            "sl": {
+              ".validate": "newData.isBoolean()"
+            },
+            "sd": {
+              ".validate": "newData.isString() && newData.val().length <= 5"
+            },
+            "si": {
+              ".validate": "newData.isBoolean()"
+            },
+            "sid": {
+              ".validate": "newData.isString() && newData.val().length <= 64"
+            },
+            "x": {
+              ".validate": "newData.isNumber()"
+            },
+            "y": {
+              ".validate": "newData.isNumber()"
+            },
+            "tx": {
+              ".validate": "newData.isNumber()"
+            },
+            "ty": {
+              ".validate": "newData.isNumber()"
+            },
+            "ts": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "chat": {
+          ".indexOn": [
+            "ts"
+          ],
+          "$msg": {
+            ".write": "auth != null && auth.token.email === 'room-access@uripon-meta-room.invalid' && (!data.exists() || !newData.exists())",
+            ".validate": "!newData.exists() || (newData.hasChildren(['n','pid','ts']) && (newData.hasChild('t') || newData.hasChild('img')))",
+            "n": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16"
+            },
+            "t": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 200"
+            },
+            "img": {
+              ".validate": "newData.isString() && newData.val().length <= 400000"
+            },
+            "pid": {
+              ".validate": "newData.isString() && newData.val().length <= 20"
+            },
+            "ts": {
+              ".validate": "newData.isNumber()"
+            },
+            "r": {
+              ".validate": "newData.hasChildren(['k','n','t'])",
+              "k": {
+                ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 100"
+              },
+              "n": {
+                ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40"
+              },
+              "t": {
+                ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 80"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "rx": {
+              "$reaction": {
+                ".validate": "$reaction === 'like' || $reaction === 'heart' || $reaction === 'clap' || $reaction === 'laugh' || $reaction === 'fire'",
+                "$player": {
+                  ".write": "auth != null && auth.token.email === 'room-access@uripon-meta-room.invalid' && $player.length <= 20",
+                  ".validate": "!newData.exists() || newData.val() === true"
+                }
+              }
+            },
+            "$other": {
+              ".validate": false
+            },
+            "mentions": {
+              ".validate": "newData.hasChildren() && newData.parent().child('t').isString()",
+              "$offset": {
+                ".validate": "$offset.matches(/^(0|[1-9][0-9]?|1[0-9][0-9])$/) && newData.hasChildren(['pid','n'])",
+                "pid": {
+                  ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20"
+                },
+                "n": {
+                  ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            }
+          }
+        },
+        "screen": {
+          ".write": "auth != null && auth.token.email === 'room-access@uripon-meta-room.invalid'"
+        },
+        "rtc": {
+          ".write": "auth != null && auth.token.email === 'room-access@uripon-meta-room.invalid'"
+        },
+        "decorV2": {
+          "$item": {
+            ".write": "auth != null && auth.token.email === 'room-access@uripon-meta-room.invalid'",
+            ".validate": "!newData.exists() || (newData.hasChildren(['id','x','y']) && newData.child('id').isString() && newData.child('id').val().length <= 16 && newData.child('x').isNumber() && newData.child('y').isNumber())"
+          }
+        }
+      }
+    }
+  }
+}

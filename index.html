@@ -129,6 +129,10 @@
     color: #8a7f90; font-size: 10px; font-weight: bold; }
   #log .chat-day-divider::before, #log .chat-day-divider::after { content: ''; flex: 1; height: 1px; background: #e5dfe8; }
   #log .chat-row { position: relative; min-height: 22px; padding-right: 75px; }
+  #log .chat-mentioned { background: #fff5dc; box-shadow: -3px 0 #d49d33; }
+  #log .chat-mention { padding: 0 3px; border-radius: 4px; background: #eee6fa; color: #583985;
+    font-weight: bold; overflow-wrap: anywhere; }
+  #log .chat-mentioned .chat-mention-self { background: #f6de9e; color: #593d0c; }
   #log .chat-react { position: absolute; top: 0; right: 50px; width: 22px; height: 22px; padding: 0;
     border: 0; border-radius: 5px; background: transparent; color: #8f8794; cursor: pointer;
     font-size: 14px; line-height: 20px; opacity: 0; pointer-events: none;
@@ -204,7 +208,16 @@
   #chatReplyCancel { flex: 0 0 auto; width: 23px; height: 23px; padding: 0; border: 0;
     background: transparent; color: #6f6678; font-size: 17px; line-height: 21px; }
   #chatReplyCancel:hover, #chatReplyCancel:focus-visible { background: #eee6f0; color: #332a3d; outline: none; }
-  #chatForm { display: flex; gap: 4px; padding: 6px; border-top: 2px solid #120d1c; }
+  #chatForm { display: flex; position: relative; gap: 4px; padding: 6px; border-top: 2px solid #120d1c; }
+  #chatMentionBtn { padding: 4px 8px; background: #f0e8ff; color: #583985; border-color: #c7afea; font-weight: bold; }
+  #chatMentionList { position: absolute; left: 6px; right: 6px; bottom: 100%; z-index: 8; max-height: 150px;
+    overflow: auto; background: #fff; color: #30283a; border: 1px solid #c7afea; border-radius: 8px;
+    padding: 3px; box-shadow: 0 5px 16px rgba(25,18,35,.24); }
+  .chat-mention-option, .chat-mention-empty { padding: 5px 8px; font-size: 12px; overflow-wrap: anywhere; }
+  .chat-mention-option { border-radius: 5px; cursor: pointer; }
+  .chat-mention-option[aria-selected="true"], .chat-mention-option:hover { background: #eee6fa; color: #583985; }
+  .chat-mention-option small { margin-left: 6px; color: #695e76; }
+  .chat-mention-empty { color: #6f6678; }
   #chatInput { flex: 1; min-width: 0; padding: 8px; font-size: 13px; color: #222; border-radius: 6px; border: none; }
   #bar { width: min(2200px, 98vw); margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   button { font-family: inherit; font-size: 14px; border-radius: 6px; border: 2px solid #120d1c;
@@ -327,7 +340,10 @@
     <div id="chatForm">
       <button id="imgBtn" title="画像を送る">📎</button>
       <input id="imgInput" type="file" accept="image/*" style="display:none">
-      <input id="chatInput" type="text" maxlength="200" placeholder="メッセージ…">
+      <button id="chatMentionBtn" type="button" title="在室者をメンション" aria-label="在室者をメンション">@</button>
+      <input id="chatInput" type="text" maxlength="200" placeholder="メッセージ…" role="combobox"
+        aria-label="チャットメッセージ" aria-autocomplete="list" aria-controls="chatMentionList" aria-expanded="false">
+      <div id="chatMentionList" role="listbox" aria-label="メンションの候補" hidden></div>
       <button id="sendBtn">送信</button>
     </div>
   </div>
@@ -444,6 +460,7 @@ Art: <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noope
 <script src="assets/map-data.js"></script>
 <script src="assets/parts-data.js"></script>
 <script src="assets/decor-data.js"></script>
+<script src="assets/chat-mentions.js"></script>
 <script>
 'use strict';
 // ================= 基本設定 =================
@@ -1408,9 +1425,9 @@ function showDirectChatNotification(title, options) {
   };
   return true;
 }
-function showChatNotification(name, text, img, key = '') {
+function showChatNotification(name, text, img, key = '', mentioned = false) {
   if (!chatNotificationEnabled()) return false;
-  const title = `💬 ${name || 'メタ部屋'}`;
+  const title = `💬 ${mentioned ? name + 'さんからメンション' : name || 'メタ部屋'}`;
   const options = {
     body: text || (img ? '📷 画像が届きました' : '新しいチャットが届きました'),
     tag: key ? `meta-room-chat-${key}` : 'meta-room-chat',
@@ -1597,14 +1614,16 @@ function connect() {
     if (notifiedChatKeys.has(chatKey)) return;
     notifiedChatKeys.add(chatKey);
     if (notifiedChatKeys.size > CHAT_HISTORY_LIMIT + 100) notifiedChatKeys.delete(notifiedChatKeys.values().next().value);
-    addLog(m.n, m.t || '', m.ts, m.img, m.pid || '', chatKey, m.r || null, m.rx || {});
+    const mentions = readChatMentions(m.t || '', m.mentions);
+    const mentioned = !!me && mentions.some(mention => mention.pid === me.id);
+    addLog(m.n, m.t || '', m.ts, m.img, m.pid || '', chatKey, m.r || null, m.rx || {}, mentions, mentioned);
     const age = Date.now() - Number(m.ts || 0);
     const fresh = age >= -5000 && age < 15000;
     if (fresh && m.pid) bubbles[m.pid] = { text: m.t || '📷 画像を送りました', until: Date.now() + 7000 };
     if (fresh && shouldNotifyChatMessage(m)) {
-      showChatNotification(m.n, m.t || '', m.img, chatKey);
+      showChatNotification(m.n, m.t || '', m.img, chatKey, mentioned);
       playChatNotificationSound();
-      toast(m.n, m.t || '📷 画像');
+      toast(mentioned ? m.n + 'さんからメンション' : m.n, m.t || '📷 画像');
     }
   });
   chatQuery.on('child_changed', snap => {
@@ -1689,9 +1708,10 @@ function closeChatReactionPickers(except = null) {
     if (picker !== except) picker.classList.remove('open');
   });
 }
-function addLog(n, t, ts, img, pid = '', key = '', replyTo = null, reactions = {}) {
+function addLog(n, t, ts, img, pid = '', key = '', replyTo = null, reactions = {}, mentions = [], mentioned = false) {
   const log = document.getElementById('log');
   const div = document.createElement('div'); div.className = 'chat-row';
+  if (mentioned) div.classList.add('chat-mentioned');
   if (key) div.dataset.chatKey = key;
   const d = new Date(ts || Date.now());
   appendChatDayDivider(log, d);
@@ -1704,7 +1724,24 @@ function addLog(n, t, ts, img, pid = '', key = '', replyTo = null, reactions = {
     quote.textContent = `↩ ${replyTo.n}：${replyTo.t || '📷 画像'}`;
     div.appendChild(quote);
   }
-  if (t) { const tx = document.createElement('span'); tx.className = 't'; linkify(tx, t); div.appendChild(tx); }
+  if (t) {
+    const tx = document.createElement('span'); tx.className = 't';
+    let previous = 0;
+    for (const { start, end, pid: target } of mentions) {
+      linkify(tx, t.slice(previous, start));
+      const marker = document.createElement('span');
+      marker.className = 'chat-mention';
+      if (target === me?.id) {
+        marker.classList.add('chat-mention-self');
+        marker.title = 'あなたへのメンション';
+      }
+      marker.textContent = t.slice(start, end);
+      tx.appendChild(marker);
+      previous = end;
+    }
+    linkify(tx, t.slice(previous));
+    div.appendChild(tx);
+  }
   if (img) {
     const im2 = document.createElement('img'); im2.className = 'chatimg'; im2.src = img;
     im2.addEventListener('click', () => {
@@ -1973,6 +2010,22 @@ function keyMove(dt, now) {
 }
 
 // ================= チャット・ステータス・エモート =================
+const chatMentions = createChatMentionComposer({
+  input: document.getElementById('chatInput'),
+  list: document.getElementById('chatMentionList'),
+  button: document.getElementById('chatMentionBtn'),
+  getCandidates() {
+    if (!me) return [];
+    const candidates = Object.values(others).filter(player => player.name)
+      .map(({ id, name }) => ({ id, name }));
+    const counts = new Map();
+    for (const { name } of candidates) counts.set(name, (counts.get(name) || 0) + 1);
+    for (const candidate of candidates) {
+      if (counts.get(candidate.name) > 1) candidate.hint = candidate.id.slice(-5);
+    }
+    return candidates.sort((a, b) => a.name.localeCompare(b.name, 'ja') || a.id.localeCompare(b.id));
+  },
+});
 let chatReplyDraft = null;
 function replySnippet(text, hasImage = false) {
   const clean = String(text || '').replace(/\s+/g, ' ').trim();
@@ -2000,15 +2053,24 @@ function currentChatReplyPayload() {
 let chatSending = false;
 async function sendChat() {
   const inp = document.getElementById('chatInput');
-  const t = inp.value.trim(); if (!t || !me || !db || chatSending) return;
-  const payload = { n: me.name, t, pid: me.id, ts: firebase.database.ServerValue.TIMESTAMP };
+  const draft = inp.value;
+  const t = draft.trim(); if (!t || !me || !db || chatSending) return;
+  const sender = me;
+  const payload = { n: sender.name, t, pid: sender.id, ts: firebase.database.ServerValue.TIMESTAMP };
+  const mentions = chatMentions.payload();
+  if (mentions) payload.mentions = mentions;
   const reply = currentChatReplyPayload(); if (reply) payload.r = reply;
   const button = document.getElementById('sendBtn');
   chatSending = true; button.disabled = true; button.textContent = '送信中…';
   try {
     await db.ref('rooms/main/chat').push().set(payload);
-    me.push && me.push();
-    inp.value = ''; cancelChatReply();
+    if (me !== sender) return;
+    sender.push?.();
+    if (inp.value === draft) {
+      inp.value = '';
+      chatMentions.reset();
+      cancelChatReply();
+    }
   } catch (error) {
     console.warn('チャット送信に失敗しました', error);
     toast('送信', 'メッセージを送信できませんでした');
@@ -2238,6 +2300,7 @@ document.getElementById('shareFull').addEventListener('click', () => {
 });
 // 日本語入力の変換確定Enterでは送信しない（2回送信バグ対策）
 document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (chatMentions.handleKey(e)) { e.preventDefault(); e.stopPropagation(); return; }
   if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) sendChat();
 });
 function setStatus(st) {

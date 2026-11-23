@@ -483,7 +483,7 @@ Art: <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noope
 <script src="assets/parts-data.js"></script>
 <script src="assets/decor-data.js"></script>
 <script src="assets/chat-mentions.js"></script>
-<script src="assets/room-labels.js"></script>
+<script src="assets/room-labels.js?v=361e03e047"></script>
 <script>
 'use strict';
 // ================= 基本設定 =================
@@ -2701,7 +2701,7 @@ function loop(now) {
   drawWarpEffects(now);
   ctx.restore();
   roomLabels.draw({ players: all, self: me, bubbles, scale: S, camX, camY,
-    avatarHeight: PFH * CHAR_SCALE, frame, now: wallTime });
+    avatarHeight: PFH * CHAR_SCALE, now: wallTime });
   requestAnimationFrame(loop);
 }
 // ================= 寝る演出（ベッドの上で横向きに寝そべる） =================

@@ -4,9 +4,12 @@ function createRoomLabels(canvas) {
   const ctx = canvas.getContext('2d');
   const padding = 4;
   const gap = 3;
+  const revealGap = 7;
   let width = 0, height = 0, density = 1;
   let tagCache = new WeakMap();
   let bubbleCache = new WeakMap();
+  let visibleTags = new WeakSet();
+  let visibleBubbles = new WeakSet();
 
   function resize(nextWidth, nextHeight, nextDensity) {
     if (nextWidth === width && nextHeight === height && nextDensity === density) return;
@@ -20,36 +23,21 @@ function createRoomLabels(canvas) {
     bubbleCache = new WeakMap();
   }
 
-  function overlaps(a, b) {
-    return a.x < b.x + b.w + gap && a.x + a.w + gap > b.x &&
-      a.y < b.y + b.h + gap && a.y + a.h + gap > b.y;
+  function fixedBox(anchor, w, h, offset = 0) {
+    return {
+      x: Math.min(Math.max(anchor.x - w / 2, padding), width - w - padding),
+      y: Math.min(Math.max(anchor.top - h - 5 - offset, padding), height - h - padding),
+      w, h,
+    };
   }
 
-  function position(anchor, w, h, occupied) {
-    const above = anchor.top - h - 5;
-    const below = anchor.bottom + 5;
-    const side = w / 2 + gap;
-    const candidates = [
-      [anchor.x - w / 2, above],
-      [anchor.x - w - side, above],
-      [anchor.x + side, above],
-      [anchor.x - w / 2, below],
-      [anchor.x - w - side, below],
-      [anchor.x + side, below],
-      [anchor.x - w / 2, above - h - gap],
-    ];
-    for (const [left, top] of candidates) {
-      const rect = {
-        x: Math.min(Math.max(left, padding), width - w - padding),
-        y: Math.min(Math.max(top, padding), height - h - padding),
-        w, h,
-      };
-      if (!occupied.some(other => overlaps(rect, other))) {
-        occupied.push(rect);
-        return rect;
-      }
-    }
-    return null;
+  function reserve(rect, occupied, space) {
+    const overlaps = occupied.some(box => rect.x < box.x + box.w + space &&
+      rect.x + rect.w + space > box.x && rect.y < box.y + box.h + space &&
+      rect.y + rect.h + space > box.y);
+    if (overlaps) return false;
+    occupied.push(rect);
+    return true;
   }
 
   function ellipsis(text, maxWidth) {
@@ -101,7 +89,7 @@ function createRoomLabels(canvas) {
     ctx.fill();
   }
 
-  function draw({ players, self, bubbles, scale, camX, camY, avatarHeight, frame, now }) {
+  function draw({ players, self, bubbles, scale, camX, camY, avatarHeight, now }) {
     if (!width || !height) return;
     ctx.clearRect(0, 0, width, height);
     ctx.textAlign = 'center';
@@ -122,44 +110,58 @@ function createRoomLabels(canvas) {
       const body = player.sleep ? 15 : player.sit ? avatarHeight - 4 : avatarHeight;
       const top = bottom - body * scale;
       const bubble = bubbles[player.id];
-      occupants.push({ player, x, top, bottom, bubble: bubble?.until > now ? bubble : null });
-    }
-    const occupied = occupants.map(({ x, top, bottom }) => ({
-      x: x - 9 * scale, y: top, w: 18 * scale, h: bottom - top,
-    }));
-    occupants.sort((a, b) => Number(b.player === self) - Number(a.player === self) || a.bottom - b.bottom);
-    for (const anchor of occupants) {
-      const { player } = anchor;
       const emote = player.emu > now ? player.em : '';
-      const icon = player.sleep ? '🛏 ' : player.sit ? '🪑 ' : emote === 'dance' ? (frame % 2 ? '♪ ' : '♫ ') :
+      const icon = player.sleep ? '🛏 ' : player.sit ? '🪑 ' : emote === 'dance' ? '💃 ' :
         emote === 'ssj' ? '⚡ ' : player.st === 'break' ? '☕ ' : '💻 ';
       const tag = getTag(player, icon, tagFont, tagMaxWidth);
-      const rect = position(anchor, tag.w, tagHeight, occupied);
-      if (!rect) continue;
-      const own = player === self;
-      fillBox(rect, own ? 'rgba(248,205,114,.98)' : 'rgba(36,29,48,.9)');
-      ctx.fillStyle = own ? '#21192b' : '#fff';
-      ctx.font = tagFont;
-      ctx.fillText(tag.text, rect.x + rect.w / 2, rect.y + rect.h / 2);
+      occupants.push({ player, x, top, tag, tagBox: fixedBox({ x, top }, tag.w, tagHeight),
+        bubble: bubble?.until > now ? bubble : null });
     }
 
-    const speaking = occupants.filter(anchor => anchor.bubble).sort((a, b) => b.bubble.until - a.bubble.until);
+    const occupied = [];
+    function drawTag({ tag, tagBox }, own) {
+      fillBox(tagBox, own ? 'rgba(248,205,114,.98)' : 'rgba(36,29,48,.9)');
+      ctx.fillStyle = own ? '#21192b' : '#fff';
+      ctx.font = tagFont;
+      ctx.fillText(tag.text, tagBox.x + tagBox.w / 2, tagBox.y + tagBox.h / 2);
+    }
+
+    const own = occupants.find(({ player }) => player === self);
+    if (own) {
+      occupied.push(own.tagBox);
+      drawTag(own, true);
+    }
+    const nextTags = new WeakSet();
+    const guests = occupants.filter(anchor => anchor !== own).sort((a, b) =>
+      Number(visibleTags.has(b.player)) - Number(visibleTags.has(a.player)) || a.player.id.localeCompare(b.player.id));
+    for (const anchor of guests) {
+      const { player, tagBox } = anchor;
+      if (!reserve(tagBox, occupied, visibleTags.has(player) ? gap : revealGap)) continue;
+      nextTags.add(player);
+      drawTag(anchor, false);
+    }
+    visibleTags = nextTags;
+
+    const nextBubbles = new WeakSet();
+    // 話者の札が隠れている場面では、別の人の発言に見えないよう吹き出しも出さない。
+    const speaking = occupants.filter(anchor => anchor.bubble && (anchor === own || visibleTags.has(anchor.player)))
+      .sort((a, b) => b.bubble.until - a.bubble.until);
     for (const anchor of speaking) {
       const { lines, w } = getBubble(anchor.bubble, bubbleFont, bubbleMaxWidth, compact ? 3 : 4);
-      const aboveTag = { ...anchor, top: anchor.top - tagHeight - gap };
-      const rect = position(aboveTag, w, lines.length * lineHeight + 8, occupied);
-      if (!rect) continue;
+      const rect = fixedBox(anchor, w, lines.length * lineHeight + 8, tagHeight + revealGap + 1);
+      // 表示に戻るときだけ少し広めの余白を取って、境目での点滅を防ぐ。
+      if (!reserve(rect, occupied, visibleBubbles.has(anchor.bubble) ? gap : revealGap)) continue;
+      nextBubbles.add(anchor.bubble);
       fillBox(rect, 'rgba(255,255,255,.97)');
       ctx.strokeStyle = 'rgba(47,37,59,.28)';
       ctx.lineWidth = 1;
       ctx.stroke();
-      const above = rect.y + rect.h <= anchor.top;
-      const edgeY = above ? rect.y + rect.h : rect.y;
+      const edgeY = rect.y + rect.h;
       const tipX = Math.max(rect.x + 5, Math.min(anchor.x, rect.x + rect.w - 5));
       ctx.beginPath();
       ctx.moveTo(tipX - 3, edgeY);
       ctx.lineTo(tipX + 3, edgeY);
-      ctx.lineTo(tipX, edgeY + (above ? 4 : -4));
+      ctx.lineTo(tipX, edgeY + 4);
       ctx.fill();
       ctx.fillStyle = '#241e30';
       ctx.font = bubbleFont;
@@ -167,6 +169,7 @@ function createRoomLabels(canvas) {
         ctx.fillText(line, rect.x + rect.w / 2, rect.y + 4 + lineHeight * (index + .5));
       });
     }
+    visibleBubbles = nextBubbles;
   }
 
   return { resize, draw };

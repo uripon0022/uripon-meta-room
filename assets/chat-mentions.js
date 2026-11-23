@@ -33,7 +33,7 @@ function createChatMentionComposer({ input, list, button, getCandidates }) {
     options = [];
     active = -1;
     list.hidden = true;
-    input.setAttribute('aria-expanded', 'false');
+    button.setAttribute('aria-expanded', 'false');
     input.removeAttribute('aria-activedescendant');
   }
 
@@ -84,7 +84,7 @@ function createChatMentionComposer({ input, list, button, getCandidates }) {
       return;
     }
     const end = input.selectionStart;
-    const match = /(?:^|[\s（(「『、。])[@＠]([^@＠]{0,16})$/.exec(input.value.slice(0, end));
+    const match = /(?:^|[\s（(「『、。])[@＠]([^@＠\r\n]{0,16})$/.exec(input.value.slice(0, end));
     const start = match ? end - match[1].length - 1 : -1;
     if (!match || mentions.some(mention => mention.start === start)) {
       close();
@@ -118,7 +118,7 @@ function createChatMentionComposer({ input, list, button, getCandidates }) {
       list.appendChild(empty);
     }
     list.hidden = false;
-    input.setAttribute('aria-expanded', 'true');
+    button.setAttribute('aria-expanded', 'true');
     const selectedIndex = results.findIndex(candidate => candidate.id === keep);
     highlight(results.length ? Math.max(0, selectedIndex) : -1);
   }

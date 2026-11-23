@@ -216,6 +216,14 @@
   #sitBtn { background: #5f7f68; }
   #sitBtn.active { background: #e8b45a; }
   #discordBtn { background: #5865F2; }
+  #voice-join { background: #376956; }
+  #voice-join:disabled, #voice-bar button:disabled { opacity: .65; cursor: wait; }
+  #voice-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    max-width: 100%; padding: 3px 5px; border: 1px solid #6b5a79; border-radius: 8px; background: #322841; }
+  #voice-bar[hidden], #voice-join[hidden], #voice-playback[hidden] { display: none; }
+  #voice-status { padding: 0 4px; font-size: 12px; }
+  #voice-mic[aria-pressed="true"] { background: #376956; }
+  #voice-leave { background: #8a4a5a; }
   #shareBtn.sharing { background: #d84848; }
   #decorPanel { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%);
     width: min(920px, 96vw); height: min(72vh, 700px); max-height: calc(100vh - 20px);
@@ -386,6 +394,14 @@
   <button id="ssjBtn">⚡ 覚醒</button>
   <button id="shareBtn">🖥 画面共有</button>
   <button id="discordBtn">🎧 ボイス(Discord)</button>
+  <button id="voice-join" type="button" hidden disabled>通話に参加</button>
+  <div id="voice-bar" role="group" aria-label="室内通話" hidden>
+    <span id="voice-status" role="status"></span>
+    <button id="voice-mic" type="button" aria-pressed="false">マイクをオン</button>
+    <button id="voice-playback" type="button" hidden>音声を再生</button>
+    <button id="voice-leave" type="button">通話を抜ける</button>
+  </div>
+  <div id="voice-audio" hidden></div>
   <button id="dressBtn">👗 着替える</button>
   <button id="decorBtn">🛋 デコ</button>
   <button id="seasonBtn" type="button" hidden aria-pressed="false">🎄 冬イベント</button>
@@ -401,7 +417,7 @@
     <button id="decorDelete" type="button" disabled>🗑 削除</button>
   </div>
 </div>
-<footer>移動: 十字キー/WASD/クリック（<b>ダブルクリックでワープ</b>）。Shift か B でダッシュ。椅子やソファに近づくと「座る」が出ます。おしゃべりはDiscordのボイスチャンネルと併用してね。
+<footer>移動: 十字キー/WASD/クリック（<b>ダブルクリックでワープ</b>）。Shift か B でダッシュ。椅子やソファに近づくと「座る」が出ます。
 Art: <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noopener" style="color:#8ac8f8">Modern Interiors by LimeZu</a></footer>
 
 <div id="lightbox"><img id="lightboxImg"></div>
@@ -440,6 +456,7 @@ Art: <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noope
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-functions-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="assets/map-data.js"></script>
 <script src="assets/parts-data.js"></script>
@@ -1076,6 +1093,7 @@ const others = {};
 const bubbles = {};
 let db = null, auth = null, myRef = null, fbReady = false;
 let roomAccessReady = false;
+let roomVoice = null;
 const decorObjects = {};
 let decorMode = false;
 let decorCategory = 'all';
@@ -2339,6 +2357,7 @@ goHomeButton.addEventListener('click', () => {
 });
 function goHome() {
   if (!me) return;
+  roomVoice?.setOnline(false);
   notifyDiscord(`🏠 ${me.name}さんが帰宅しました。おつかれさま！`);
   stopShare(); teardownViewer(); setDecoMode(false);
   if (myRef) myRef.remove();
@@ -2517,10 +2536,36 @@ function enter() {
   document.getElementById('stWork').classList.add('active');
   document.getElementById('stBreak').classList.remove('active');
   try { connect(); } catch (e) { document.getElementById('online').textContent = '⚠ 接続エラー: ' + e.message; }
+  roomVoice?.setOnline(hasVoiceAccess());
+}
+
+function hasVoiceAccess() {
+  return !!(me && roomAccessReady && auth?.currentUser?.email === ROOM_ACCOUNT_EMAIL);
+}
+
+async function initializeRoomVoice() {
+  if (window.FIREBASE_CONFIG?.projectId !== 'uripon-meta-room-next') return;
+  try {
+    const { createRoomVoice } = await import('./assets/room-voice.mjs');
+    const requestToken = firebase.app().functions('asia-northeast1').httpsCallable('issueRoomVoiceToken');
+    roomVoice = createRoomVoice({
+      async requestToken() {
+        if (!hasVoiceAccess()) throw new Error('room-access-required');
+        const { data } = await requestToken();
+        return data;
+      },
+      notify: message => toast('室内通話', message),
+    });
+    auth.onAuthStateChanged(() => roomVoice.setOnline(hasVoiceAccess()));
+    window.addEventListener('pagehide', () => roomVoice.leave());
+  } catch (error) {
+    console.warn('室内通話を初期化できませんでした', error);
+  }
 }
 
 // 最初に部屋の認証状態を確認。認証済み＋アバター設定済みなら、そのまま自動入室する。
 initializeRoomAccess();
+initializeRoomVoice();
 
 // ================= メインループ =================
 // buildRoom() はタイル画像の読み込み完了後（loadTilesAndBuild内）に呼ばれる
